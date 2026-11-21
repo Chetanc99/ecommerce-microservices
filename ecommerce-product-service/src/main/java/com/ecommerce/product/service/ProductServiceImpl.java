@@ -1,20 +1,29 @@
 package com.ecommerce.product.service;
 
+import com.ecommerce.product.dto.PageResponse;
 import com.ecommerce.product.dto.ProductRequest;
 import com.ecommerce.product.dto.ProductResponse;
+import com.ecommerce.product.dto.StockRequest;
 import com.ecommerce.product.entity.Product;
+import com.ecommerce.product.exception.InsufficientStockException;
 import com.ecommerce.product.exception.ProductNotFoundException;
 import com.ecommerce.product.repository.ProductRepository;
 
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
-import java.util.List;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 
 @Service
 @Transactional
 public class ProductServiceImpl implements ProductService {
+
+    private static final String PRODUCT_CACHE = "products";
 
     private final ProductRepository productRepository;
 
@@ -23,115 +32,100 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
+    @CacheEvict(cacheNames = PRODUCT_CACHE, allEntries = true)
     public ProductResponse createProduct(ProductRequest request) {
 
         Product product = new Product();
+        applyRequest(product, request);
 
-        product.setName(request.getName());
-        product.setDescription(request.getDescription());
-        product.setPrice(request.getPrice());
-        product.setQuantity(request.getQuantity());
-        product.setCategory(request.getCategory());
-        product.setImageUrl(request.getImageUrl());
-
-        LocalDateTime now = LocalDateTime.now();
-
-        product.setCreatedAt(now);
-        product.setUpdatedAt(now);
-
-        Product savedProduct = productRepository.save(product);
-
-        return mapToResponse(savedProduct);
+        return mapToResponse(productRepository.save(product));
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<ProductResponse> getAllProducts() {
-
-        return productRepository.findAll()
-                .stream()
-                .map(this::mapToResponse)
-                .toList();
+    public PageResponse<ProductResponse> getAllProducts(Pageable pageable) {
+        return PageResponse.from(productRepository.findAll(pageable), this::mapToResponse);
     }
 
     @Override
     @Transactional(readOnly = true)
+    @Cacheable(cacheNames = PRODUCT_CACHE, key = "#id")
     public ProductResponse getProductById(Long id) {
-
-        Product product = productRepository.findById(id)
-                .orElseThrow(() ->
-                        new ProductNotFoundException(
-                                "Product not found with id: " + id
-                        )
-                );
-
-        return mapToResponse(product);
+        return mapToResponse(findProduct(id));
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<ProductResponse> getProductsByCategory(
-            String category) {
-
-        return productRepository
-                .findByCategoryIgnoreCase(category)
-                .stream()
-                .map(this::mapToResponse)
-                .toList();
+    public PageResponse<ProductResponse> getProductsByCategory(String category, Pageable pageable) {
+        Page<Product> products = productRepository.findByCategoryIgnoreCase(category, pageable);
+        return PageResponse.from(products, this::mapToResponse);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<ProductResponse> searchProducts(String name) {
-
-        return productRepository
-                .findByNameContainingIgnoreCase(name)
-                .stream()
-                .map(this::mapToResponse)
-                .toList();
+    public PageResponse<ProductResponse> searchProducts(String name, Pageable pageable) {
+        Page<Product> products = productRepository.findByNameContainingIgnoreCase(name, pageable);
+        return PageResponse.from(products, this::mapToResponse);
     }
 
     @Override
-    public ProductResponse updateProduct(
-            Long id,
-            ProductRequest request) {
+    @CacheEvict(cacheNames = PRODUCT_CACHE, allEntries = true)
+    public ProductResponse updateProduct(Long id, ProductRequest request) {
 
-        Product product = productRepository.findById(id)
-                .orElseThrow(() ->
-                        new ProductNotFoundException(
-                                "Product not found with id: " + id
-                        )
-                );
+        Product product = findProduct(id);
+        applyRequest(product, request);
 
-        product.setName(request.getName());
-        product.setDescription(request.getDescription());
-        product.setPrice(request.getPrice());
-        product.setQuantity(request.getQuantity());
-        product.setCategory(request.getCategory());
-        product.setImageUrl(request.getImageUrl());
-        product.setUpdatedAt(LocalDateTime.now());
-
-        Product updatedProduct =
-                productRepository.save(product);
-
-        return mapToResponse(updatedProduct);
+        return mapToResponse(productRepository.save(product));
     }
 
     @Override
+    @CacheEvict(cacheNames = PRODUCT_CACHE, allEntries = true)
     public void deleteProduct(Long id) {
+        productRepository.delete(findProduct(id));
+    }
 
-        Product product = productRepository.findById(id)
-                .orElseThrow(() ->
-                        new ProductNotFoundException(
-                                "Product not found with id: " + id
-                        )
-                );
+    @Override
+    @CacheEvict(cacheNames = PRODUCT_CACHE, allEntries = true)
+    public ProductResponse reserveStock(Long id, StockRequest request) {
 
-        productRepository.delete(product);
+        Product product = findProduct(id);
+
+        if (product.getQuantity() < request.quantity()) {
+            throw new InsufficientStockException(
+                    "Product %d only has %d item(s) available".formatted(id, product.getQuantity())
+            );
+        }
+
+        product.setQuantity(product.getQuantity() - request.quantity());
+
+        return mapToResponse(productRepository.save(product));
+    }
+
+    @Override
+    @CacheEvict(cacheNames = PRODUCT_CACHE, allEntries = true)
+    public void releaseStock(Long id, StockRequest request) {
+
+        Product product = findProduct(id);
+        product.setQuantity(product.getQuantity() + request.quantity());
+
+        productRepository.save(product);
+    }
+
+    private Product findProduct(Long id) {
+        return productRepository.findById(id)
+                .orElseThrow(() -> new ProductNotFoundException("Product not found with id: " + id));
+    }
+
+    private void applyRequest(Product product, ProductRequest request) {
+        product.setName(request.getName().trim());
+        product.setDescription(request.getDescription());
+        product.setPrice(request.getPrice().setScale(2, RoundingMode.HALF_UP));
+        product.setQuantity(request.getQuantity());
+        product.setCategory(request.getCategory().trim());
+        product.setImageUrl(request.getImageUrl());
     }
 
     private ProductResponse mapToResponse(Product product) {
-
         return new ProductResponse(
                 product.getId(),
                 product.getName(),

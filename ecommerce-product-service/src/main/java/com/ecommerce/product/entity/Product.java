@@ -1,6 +1,14 @@
 package com.ecommerce.product.entity;
 
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import jakarta.persistence.Version;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -25,15 +33,22 @@ public class Product {
     @Column(nullable = false)
     private Integer quantity;
 
-    @Column(nullable = false)
+    @Column(nullable = false, length = 100)
     private String category;
 
+    @Column(length = 500)
     private String imageUrl;
 
-    @Column(nullable = false)
+    @CreationTimestamp
+    @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    @UpdateTimestamp
     private LocalDateTime updatedAt;
+
+    @Version
+    @Column(nullable = false)
+    private Long version;
 
     public Product() {
     }
@@ -98,15 +113,11 @@ public class Product {
         return createdAt;
     }
 
-    public void setCreatedAt(LocalDateTime createdAt) {
-        this.createdAt = createdAt;
-    }
-
     public LocalDateTime getUpdatedAt() {
         return updatedAt;
     }
 
-    public void setUpdatedAt(LocalDateTime updatedAt) {
-        this.updatedAt = updatedAt;
+    public Long getVersion() {
+        return version;
     }
 }

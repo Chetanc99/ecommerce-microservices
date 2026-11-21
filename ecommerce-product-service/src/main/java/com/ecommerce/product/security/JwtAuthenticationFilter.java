@@ -1,16 +1,17 @@
 package com.ecommerce.product.security;
 
+import com.ecommerce.common.security.JwtPrincipal;
+import com.ecommerce.common.security.JwtService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.util.Collections;
 
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
@@ -24,51 +25,28 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     protected void doFilterInternal(
             HttpServletRequest request,
             HttpServletResponse response,
-            FilterChain filterChain)
-            throws ServletException, IOException {
+            FilterChain filterChain) throws ServletException, IOException {
 
-        String authHeader =
-                request.getHeader("Authorization");
+        String authHeader = request.getHeader("Authorization");
 
-        // No Authorization header
-        if (authHeader == null ||
-                !authHeader.startsWith("Bearer ")) {
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            try {
+                JwtPrincipal principal = jwtService.parseToken(authHeader.substring(7));
 
-            filterChain.doFilter(request, response);
-            return;
-        }
+                var authorities = principal.roles().stream()
+                        .map(role -> new SimpleGrantedAuthority("ROLE_" + role))
+                        .toList();
 
-        // Remove "Bearer " from header
-        String token = authHeader.substring(7);
+                var authentication = new UsernamePasswordAuthenticationToken(
+                        principal,
+                        null,
+                        authorities
+                );
 
-        try {
-
-            // Validate JWT and extract email
-            String email =
-                    jwtService.extractEmail(token);
-
-            System.out.println(
-                    "JWT validated for: " + email
-            );
-
-            // Create authentication object
-            UsernamePasswordAuthenticationToken authentication =
-                    new UsernamePasswordAuthenticationToken(
-                            email,
-                            null,
-                            Collections.emptyList()
-                    );
-
-            // Store authentication in SecurityContext
-            SecurityContextHolder
-                    .getContext()
-                    .setAuthentication(authentication);
-
-        } catch (Exception e) {
-
-            System.out.println(
-                    "Invalid JWT token: " + e.getMessage()
-            );
+                SecurityContextHolder.getContext().setAuthentication(authentication);
+            } catch (Exception ignored) {
+                SecurityContextHolder.clearContext();
+            }
         }
 
         filterChain.doFilter(request, response);
