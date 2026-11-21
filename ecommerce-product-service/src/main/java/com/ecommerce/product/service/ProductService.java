@@ -1,26 +1,29 @@
 package com.ecommerce.product.service;
 
+import com.ecommerce.product.dto.PageResponse;
 import com.ecommerce.product.dto.ProductRequest;
 import com.ecommerce.product.dto.ProductResponse;
+import com.ecommerce.product.dto.StockRequest;
 
-import java.util.List;
+import org.springframework.data.domain.Pageable;
 
 public interface ProductService {
 
     ProductResponse createProduct(ProductRequest request);
 
-    List<ProductResponse> getAllProducts();
+    PageResponse<ProductResponse> getAllProducts(Pageable pageable);
 
     ProductResponse getProductById(Long id);
 
-    List<ProductResponse> getProductsByCategory(String category);
+    PageResponse<ProductResponse> getProductsByCategory(String category, Pageable pageable);
 
-    List<ProductResponse> searchProducts(String name);
+    PageResponse<ProductResponse> searchProducts(String name, Pageable pageable);
 
-    ProductResponse updateProduct(
-            Long id,
-            ProductRequest request
-    );
+    ProductResponse updateProduct(Long id, ProductRequest request);
 
     void deleteProduct(Long id);
+
+    ProductResponse reserveStock(Long id, StockRequest request);
+
+    void releaseStock(Long id, StockRequest request);
 }

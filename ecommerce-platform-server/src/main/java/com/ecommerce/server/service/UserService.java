@@ -6,7 +6,15 @@ public interface UserService {
 
     User register(User user);
 
+    User login(String email, String password);
+
     User findByEmail(String email);
 
-    User login(String email, String password);
+    User findById(Long id);
+
+    User updateProfile(Long userId, String name, String email);
+
+    void changePassword(Long userId, String currentPassword, String newPassword);
+
+    void ensureAdmin(String email, String password);
 }

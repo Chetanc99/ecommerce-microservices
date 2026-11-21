@@ -1,74 +1,82 @@
 package com.ecommerce.product.exception;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.ProblemDetail;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
-import java.time.LocalDateTime;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
     @ExceptionHandler(ProductNotFoundException.class)
-    public ResponseEntity<Map<String, Object>> handleProductNotFound(
-            ProductNotFoundException exception) {
+    public ProblemDetail handleProductNotFound(ProductNotFoundException exception) {
 
-        Map<String, Object> response = new HashMap<>();
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND,
+                exception.getMessage());
+        problem.setTitle("Product not found");
+        return problem;
+    }
 
-        response.put("timestamp", LocalDateTime.now());
-        response.put("status", 404);
-        response.put("error", "Product Not Found");
-        response.put("message", exception.getMessage());
+    @ExceptionHandler(InsufficientStockException.class)
+    public ProblemDetail handleInsufficientStock(InsufficientStockException exception) {
 
-        return ResponseEntity
-                .status(HttpStatus.NOT_FOUND)
-                .body(response);
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
+                exception.getMessage());
+        problem.setTitle("Insufficient stock");
+        return problem;
+    }
+
+    @ExceptionHandler(OptimisticLockingFailureException.class)
+    public ProblemDetail handleOptimisticLock(OptimisticLockingFailureException exception) {
+
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
+                "The product was changed by another request. Please retry.");
+        problem.setTitle("Concurrent update");
+        return problem;
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<Map<String, Object>> handleValidation(
-            MethodArgumentNotValidException exception) {
+    public ProblemDetail handleValidation(MethodArgumentNotValidException exception) {
 
-        Map<String, String> errors = new HashMap<>();
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST,
+                "The request contains invalid fields.");
+        problem.setTitle("Validation failed");
 
-        exception.getBindingResult()
-                .getFieldErrors()
-                .forEach(error ->
-                        errors.put(
-                                error.getField(),
-                                error.getDefaultMessage()
-                        )
-                );
+        Map<String, String> fieldErrors = new LinkedHashMap<>();
+        exception.getBindingResult().getFieldErrors().forEach(error ->
+                fieldErrors.putIfAbsent(error.getField(), error.getDefaultMessage()));
 
-        Map<String, Object> response = new HashMap<>();
+        problem.setProperty("errors", fieldErrors);
+        return problem;
+    }
 
-        response.put("timestamp", LocalDateTime.now());
-        response.put("status", 400);
-        response.put("error", "Validation Failed");
-        response.put("messages", errors);
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ProblemDetail handleUnreadableMessage(HttpMessageNotReadableException exception) {
 
-        return ResponseEntity
-                .badRequest()
-                .body(response);
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST,
+                "The request body is missing or malformed.");
+        problem.setTitle("Malformed request");
+        return problem;
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<Map<String, Object>> handleGeneralException(
-            Exception exception) {
+    public ProblemDetail handleUnexpected(Exception exception) {
 
-        Map<String, Object> response = new HashMap<>();
+        log.error("Unhandled product service error", exception);
 
-        response.put("timestamp", LocalDateTime.now());
-        response.put("status", 500);
-        response.put("error", "Internal Server Error");
-        response.put("message", exception.getMessage());
-
-        return ResponseEntity
-                .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(response);
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR,
+                "The product request could not be completed.");
+        problem.setTitle("Internal server error");
+        return problem;
     }
 }

@@ -10,14 +10,13 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.4.1</version>
+        <version>4.0.9</version>
         <relativePath/>
     </parent>
 
     <groupId>com.ecommerce</groupId>
     <artifactId>ecommerce-platform</artifactId>
     <version>1.0.0-SNAPSHOT</version>
-
     <packaging>pom</packaging>
 
     <name>ecommerce-platform</name>
@@ -25,9 +24,54 @@
 
     <properties>
         <java.version>21</java.version>
+        <jjwt.version>0.12.6</jjwt.version>
+        <spring-cloud.version>2025.1.4</spring-cloud.version>
+        <razorpay.version>1.4.10</razorpay.version>
     </properties>
-     <modules>
-         <module>ecommerce-platform-server</module>
+
+    <modules>
+        <module>ecommerce-common-security</module>
+        <module>ecommerce-common-events</module>
+        <module>ecommerce-platform-server</module>
+        <module>ecommerce-product-service</module>
+        <module>ecommerce-order-service</module>
+        <module>ecommerce-payment-service</module>
+        <module>ecommerce-notification-service</module>
+        <module>ecommerce-api-gateway</module>
     </modules>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-dependencies</artifactId>
+                <version>${spring-cloud.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>io.jsonwebtoken</groupId>
+                <artifactId>jjwt-api</artifactId>
+                <version>${jjwt.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.jsonwebtoken</groupId>
+                <artifactId>jjwt-impl</artifactId>
+                <version>${jjwt.version}</version>
+                <scope>runtime</scope>
+            </dependency>
+            <dependency>
+                <groupId>io.jsonwebtoken</groupId>
+                <artifactId>jjwt-jackson</artifactId>
+                <version>${jjwt.version}</version>
+                <scope>runtime</scope>
+            </dependency>
+            <dependency>
+                <groupId>com.razorpay</groupId>
+                <artifactId>razorpay-java</artifactId>
+                <version>${razorpay.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
 </project>

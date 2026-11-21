@@ -1,5 +1,13 @@
 # Maven
 target/
+*.jar.original
+
+# Node / frontend
+node_modules/
+dist/
+npm-debug.log*
+.vite/
+.eslintcache
 
 # IntelliJ
 .idea/
@@ -9,6 +17,7 @@ target/
 .classpath
 .project
 .settings/
+.factorypath
 
 # VS Code
 .vscode/
@@ -16,10 +25,15 @@ target/
 # Environment / secrets
 .env
 *.env
+!.env.example
 
 # Logs
 *.log
 
+# Docker local volumes (if ever bind-mounted)
+docker-data/
+
 # OS
 .DS_Store
 Thumbs.db
+.metadata/

@@ -1,19 +1,24 @@
 package com.ecommerce.server.config;
 
+import com.ecommerce.common.security.JwtService;
 import com.ecommerce.server.security.JwtAuthenticationFilter;
-import com.ecommerce.server.security.JwtService;
-import com.ecommerce.server.service.UserService;
-
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-
+import org.springframework.http.HttpMethod;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
-
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+import java.util.Arrays;
+import java.util.List;
 
 @Configuration
 public class SecurityConfig {
@@ -24,46 +29,63 @@ public class SecurityConfig {
     }
 
     @Bean
-    public JwtAuthenticationFilter jwtAuthenticationFilter(
-            JwtService jwtService,
-            UserService userService) {
-
-        return new JwtAuthenticationFilter(
-                jwtService,
-                userService
-        );
+    public JwtAuthenticationFilter jwtAuthenticationFilter(JwtService jwtService) {
+        return new JwtAuthenticationFilter(jwtService);
     }
 
-    
-   
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource(
+            @Value("${app.cors.allowed-origins:http://localhost:5173}") String allowedOrigins) {
+
+        CorsConfiguration configuration = new CorsConfiguration();
+        configuration.setAllowedOrigins(Arrays.stream(allowedOrigins.split(","))
+                .map(String::trim)
+                .toList());
+        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Correlation-Id"));
+        configuration.setExposedHeaders(List.of("X-Correlation-Id"));
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", configuration);
+        return source;
+    }
+
     @Bean
     public SecurityFilterChain securityFilterChain(
             HttpSecurity http,
-            JwtAuthenticationFilter jwtAuthenticationFilter)
-            throws Exception {
+            JwtAuthenticationFilter jwtAuthenticationFilter) throws Exception {
 
         http
-            .csrf(csrf -> csrf.disable())
-
-            .sessionManagement(session ->
-                session.sessionCreationPolicy(
-                    SessionCreationPolicy.STATELESS
-                )
-            )
-
-            .authorizeHttpRequests(auth -> auth
-            	    .requestMatchers(
-            	        org.springframework.http.HttpMethod.POST,
-            	        "/api/users/register",
-            	        "/api/users/login"
-            	    ).permitAll()
-            	    .anyRequest().authenticated()
-            	)  
-            .addFilterBefore(
-                jwtAuthenticationFilter,
-                UsernamePasswordAuthenticationFilter.class
-            );
+                .csrf(csrf -> csrf.disable())
+                .cors(Customizer.withDefaults())
+                .sessionManagement(session ->
+                        session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers(HttpMethod.POST, "/api/users/register", "/api/users/login").permitAll()
+                        .requestMatchers("/actuator/health", "/actuator/info").permitAll()
+                        .anyRequest().authenticated())
+                .exceptionHandling(exceptions -> exceptions
+                        .authenticationEntryPoint((request, response, exception) ->
+                                writeProblem(response, 401, "Unauthorized",
+                                        "Authentication is required to access this resource."))
+                        .accessDeniedHandler((request, response, exception) ->
+                                writeProblem(response, 403, "Forbidden",
+                                        "You do not have permission to access this resource.")))
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
+    }
+
+    private static void writeProblem(
+            jakarta.servlet.http.HttpServletResponse response,
+            int status,
+            String title,
+            String detail) throws java.io.IOException {
+
+        response.setStatus(status);
+        response.setContentType("application/problem+json");
+        response.getWriter().write("""
+                {"type":"about:blank","title":"%s","status":%d,"detail":"%s"}
+                """.formatted(title, status, detail));
     }
 }

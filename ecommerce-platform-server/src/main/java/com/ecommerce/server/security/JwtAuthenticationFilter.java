@@ -1,88 +1,52 @@
 package com.ecommerce.server.security;
 
-import com.ecommerce.server.entity.User;
-import com.ecommerce.server.service.UserService;
-
+import com.ecommerce.common.security.JwtPrincipal;
+import com.ecommerce.common.security.JwtService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.util.Collections;
 
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
 
-    private final UserService userService;
-
-    public JwtAuthenticationFilter(
-            JwtService jwtService,
-            UserService userService) {
-
+    public JwtAuthenticationFilter(JwtService jwtService) {
         this.jwtService = jwtService;
-        this.userService = userService;
     }
 
     @Override
     protected void doFilterInternal(
             HttpServletRequest request,
             HttpServletResponse response,
-            FilterChain filterChain)
-            throws ServletException, IOException {
+            FilterChain filterChain) throws ServletException, IOException {
 
         String authHeader = request.getHeader("Authorization");
 
-        if (authHeader == null ||
-                !authHeader.startsWith("Bearer ")) {
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            try {
+                JwtPrincipal principal = jwtService.parseToken(authHeader.substring(7));
 
-            filterChain.doFilter(request, response);
-            return;
-        }
+                var authorities = principal.roles().stream()
+                        .map(role -> new SimpleGrantedAuthority("ROLE_" + role))
+                        .toList();
 
-        String token = authHeader.substring(7);
+                var authentication = new UsernamePasswordAuthenticationToken(
+                        principal,
+                        null,
+                        authorities
+                );
 
-        try {
-
-            System.out.println("JWT Token received");
-
-            String email = jwtService.extractEmail(token);
-
-            System.out.println("Email from JWT: " + email);
-
-            User user = userService.findByEmail(email);
-
-            System.out.println("User found: " + (user != null));
-
-            if (user != null &&
-                    SecurityContextHolder
-                            .getContext()
-                            .getAuthentication() == null) {
-
-                UsernamePasswordAuthenticationToken authentication =
-                        new UsernamePasswordAuthenticationToken(
-                                user.getEmail(),
-                                null,
-                                Collections.emptyList()
-                        );
-
-                SecurityContextHolder
-                        .getContext()
-                        .setAuthentication(authentication);
-
-                System.out.println("Authentication set successfully");
+                SecurityContextHolder.getContext().setAuthentication(authentication);
+            } catch (Exception ignored) {
+                SecurityContextHolder.clearContext();
             }
-
-        } catch (Exception e) {
-
-            System.out.println(
-                    "Invalid JWT token: " + e.getMessage()
-            );
         }
 
         filterChain.doFilter(request, response);
